@@ -1,0 +1,15 @@
+{
+  "name": "missav-multi-source-downloader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome/Brave MV3 extension for verified multi-source HLS downloading.",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node --test",
+    "package": "node scripts/package.mjs",
+    "verify": "npm run check && npm test && npm run package"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

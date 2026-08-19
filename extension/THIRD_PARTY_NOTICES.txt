@@ -1,0 +1,9 @@
+This extension is adapted from the userscript:
+
+MissAV video download tool
+Author: Luuuucus, 人民的勤务员
+Namespace/Homepage: https://github.com/ChinaGodMan/UserScripts
+License declared by the source userscript: MIT
+Source version observed: 2026.3.31.1
+
+The extension wrapper, Manifest V3 structure, robustness changes, and Traditional Chinese UI were created as a conversion of that userscript.

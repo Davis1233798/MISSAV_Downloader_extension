@@ -1,0 +1,178 @@
+#missav-ext-downloader {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.82);
+  color: #fff;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#missav-ext-downloader *,
+#missav-ext-downloader *::before,
+#missav-ext-downloader *::after {
+  box-sizing: border-box;
+}
+
+.mav-ext-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.mav-ext-title {
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.mav-ext-source-counter,
+.mav-ext-status,
+.mav-ext-source-info {
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.mav-ext-source-counter {
+  margin-top: 3px;
+}
+
+.mav-ext-header-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mav-ext-thread-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.mav-ext-concurrency {
+  appearance: auto;
+  min-width: 56px;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 5px;
+  background: #111827;
+  color: #fff;
+  font-size: 12px;
+}
+
+.mav-ext-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mav-ext-item {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) auto;
+  grid-template-areas:
+    "quality url actions"
+    "quality source actions";
+  align-items: center;
+  gap: 4px 10px;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+
+.mav-ext-quality {
+  grid-area: quality;
+  color: #86efac;
+  font-weight: 750;
+}
+
+.mav-ext-url {
+  grid-area: url;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  opacity: 0.86;
+}
+
+.mav-ext-source-info {
+  grid-area: source;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mav-ext-actions {
+  grid-area: actions;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+#missav-ext-downloader .mav-ext-btn {
+  appearance: none;
+  border: 0 !important;
+  border-radius: 5px;
+  padding: 6px 10px;
+  background: #e5e7eb !important;
+  color: #111827 !important;
+  opacity: 1 !important;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#missav-ext-downloader .mav-ext-btn-primary {
+  background: #86efac !important;
+  color: #052e16 !important;
+}
+
+.mav-ext-btn:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.mav-ext-btn:disabled {
+  cursor: progress;
+  opacity: 0.75 !important;
+}
+
+.mav-ext-error {
+  color: #fca5a5;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .mav-ext-header {
+    flex-direction: column;
+  }
+
+  .mav-ext-header-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .mav-ext-item {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "quality"
+      "url"
+      "source"
+      "actions";
+  }
+
+  .mav-ext-actions {
+    justify-content: flex-start;
+  }
+}
