@@ -1,10 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "MissAV Multi-Source Downloader",
-  "version": "1.0.0",
-  "description": "Discover and verify HLS mirror sources, then download with bounded-memory concurrent workers on Chrome and Brave.",
+  "name": "__MSG_extName__",
+  "version": "1.1.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "permissions": [
-    "clipboardWrite"
+    "clipboardWrite",
+    "downloads"
   ],
   "host_permissions": [
     "https://*/*"
@@ -17,7 +19,9 @@
         "*://missav.ai/*",
         "*://missav123.com/*",
         "*://missav.fans/*",
-        "*://missav.media/*"
+        "*://missav.media/*",
+        "*://pornhub.com/*",
+        "*://*.pornhub.com/*"
       ],
       "js": [
         "sniffer.js"
@@ -32,7 +36,9 @@
         "*://missav.ai/*",
         "*://missav123.com/*",
         "*://missav.fans/*",
-        "*://missav.media/*"
+        "*://missav.media/*",
+        "*://pornhub.com/*",
+        "*://*.pornhub.com/*"
       ],
       "js": [
         "content.js"
@@ -50,7 +56,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "MissAV Multi-Source Video Downloader",
+    "default_title": "__MSG_actionTitle__",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"
