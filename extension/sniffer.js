@@ -1,24 +1,27 @@
 (() => {
   'use strict';
 
-  const TAG = 'missav-ext-hls-url';
+  const EVENT = 'media-ext-media-url';
   const seen = new Set();
 
   function normalize(value) {
     try {
       const raw = typeof value === 'string' ? value : value?.url || String(value || '');
       const url = new URL(raw, location.href).href;
-      return /^https:\/\//i.test(url) && /\.m3u8(?:[?#]|$)/i.test(url) ? url : null;
+      if (!/^https:\/\//i.test(url)) return null;
+      if (/\.m3u8(?:[?#]|$)/i.test(url)) return { url, kind: 'hls' };
+      if (/\.mp4(?:[?#]|$)/i.test(url)) return { url, kind: 'mp4' };
+      return null;
     } catch {
       return null;
     }
   }
 
   function report(value) {
-    const url = normalize(value);
-    if (!url || seen.has(url)) return;
-    seen.add(url);
-    window.postMessage({ type: TAG, url }, location.origin);
+    const item = normalize(value);
+    if (!item || seen.has(item.url)) return;
+    seen.add(item.url);
+    window.postMessage({ type: EVENT, ...item }, location.origin);
   }
 
   try {
@@ -48,34 +51,34 @@
     };
   } catch {}
 
-  function scanElement(el) {
-    if (!(el instanceof Element)) return;
-    for (const attr of ['src', 'href', 'data-src', 'data-url', 'data-playlist']) {
-      const value = el.getAttribute(attr);
+  function scanElement(element) {
+    if (!(element instanceof Element)) return;
+    for (const attr of ['src', 'href', 'data-src', 'data-url', 'data-playlist', 'data-video-url']) {
+      const value = element.getAttribute(attr);
       if (value) report(value);
     }
   }
 
   try {
     document.addEventListener('DOMContentLoaded', () => {
-      document.querySelectorAll('[src],[href],[data-src],[data-url],[data-playlist]').forEach(scanElement);
+      document.querySelectorAll('[src],[href],[data-src],[data-url],[data-playlist],[data-video-url]').forEach(scanElement);
     }, { once: true });
 
-    const mo = new MutationObserver(records => {
+    const observer = new MutationObserver(records => {
       for (const record of records) {
         if (record.type === 'attributes') scanElement(record.target);
         for (const node of record.addedNodes || []) {
           if (!(node instanceof Element)) continue;
           scanElement(node);
-          node.querySelectorAll?.('[src],[href],[data-src],[data-url],[data-playlist]').forEach(scanElement);
+          node.querySelectorAll?.('[src],[href],[data-src],[data-url],[data-playlist],[data-video-url]').forEach(scanElement);
         }
       }
     });
-    mo.observe(document.documentElement, {
+    observer.observe(document.documentElement, {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ['src', 'href', 'data-src', 'data-url', 'data-playlist']
+      attributeFilter: ['src', 'href', 'data-src', 'data-url', 'data-playlist', 'data-video-url']
     });
   } catch {}
 })();
