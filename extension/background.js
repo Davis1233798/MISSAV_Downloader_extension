@@ -17,10 +17,28 @@ function isHttps(url) {
   }
 }
 
+function isSupportedSender(sender) {
+  try {
+    const host = new URL(sender?.url || '').hostname.toLowerCase();
+    return MISSAV_HOSTS.includes(host) || host === 'pornhub.com' || host.endsWith('.pornhub.com');
+  } catch {
+    return false;
+  }
+}
+
+function safeFilename(value) {
+  return (String(value || 'video.mp4')
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 160) || 'video.mp4');
+}
+
 function extractHlsCandidates(text, baseUrl) {
   const out = new Set();
   const decoded = String(text || '')
     .replace(/\\\//g, '/')
+    .replace(/\\u0026/gi, '&')
     .replace(/&amp;/g, '&');
 
   const absolute = /https:\/\/[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?/ig;
@@ -37,7 +55,7 @@ function extractHlsCandidates(text, baseUrl) {
 }
 
 async function fetchText(url) {
-  if (!isHttps(url)) throw new Error('只允許 HTTPS URL');
+  if (!isHttps(url)) throw new Error('Only HTTPS URLs are allowed');
   const response = await fetch(url, {
     method: 'GET',
     credentials: 'omit',
@@ -45,7 +63,7 @@ async function fetchText(url) {
     redirect: 'follow'
   });
   const text = await response.text();
-  if (!response.ok) throw new Error(`HTTP ${response.status}：${url}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`);
   return { text, finalUrl: response.url || url };
 }
 
@@ -68,7 +86,7 @@ async function discoverMirrorPages(pathAndQuery, currentHost) {
   return { candidates: [...candidates], pages: results };
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
 
   if (message.type === 'fetch-text') {
@@ -91,6 +109,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           String(message.currentHost || '')
         );
         sendResponse({ ok: true, ...result });
+      } catch (error) {
+        sendResponse({ ok: false, error: error?.message || String(error) });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === 'download-direct') {
+    (async () => {
+      try {
+        if (!isSupportedSender(sender)) throw new Error('Unsupported page');
+        if (!isHttps(message.url) || !/\.mp4(?:[?#]|$)/i.test(String(message.url))) {
+          throw new Error('Direct download must be an HTTPS MP4 URL');
+        }
+        const downloadId = await chrome.downloads.download({
+          url: String(message.url),
+          filename: safeFilename(message.filename),
+          saveAs: true,
+          conflictAction: 'uniquify'
+        });
+        sendResponse({ ok: true, downloadId });
       } catch (error) {
         sendResponse({ ok: false, error: error?.message || String(error) });
       }
