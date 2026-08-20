@@ -11,10 +11,23 @@ test('manifest is MV3 and semver aligned', async () => {
   assert.equal(manifest.version, pkg.version);
 });
 
-test('content scripts are restricted to supported MissAV hosts', () => {
+test('content scripts support MissAV and Pornhub only by declared patterns', () => {
   const matches = manifest.content_scripts.flatMap(item => item.matches || []);
-  assert.ok(matches.length >= 6);
-  for (const match of matches) assert.match(match, /^\*:\/\/missav/);
+  assert.ok(matches.includes('*://missav.ai/*'));
+  assert.ok(matches.includes('*://pornhub.com/*'));
+  assert.ok(matches.includes('*://*.pornhub.com/*'));
+  assert.ok(!matches.includes('<all_urls>'));
+});
+
+test('direct MP4 support declares downloads permission', () => {
+  assert.ok(manifest.permissions.includes('downloads'));
+});
+
+test('manifest uses Chrome i18n messages', () => {
+  assert.equal(manifest.default_locale, 'en');
+  assert.match(manifest.name, /^__MSG_.+__$/);
+  assert.match(manifest.description, /^__MSG_.+__$/);
+  assert.match(manifest.action.default_title, /^__MSG_.+__$/);
 });
 
 test('background service worker exists in manifest', () => {

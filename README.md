@@ -1,29 +1,35 @@
-# MissAV Multi-Source Downloader
+# Multi-Source Video Downloader
 
-Chrome/Brave Manifest V3 extension that discovers HLS URLs, verifies byte-identical mirror sources, and downloads HLS segments with a bounded-memory concurrent worker pipeline.
+[English](README.md) | [繁體中文](README.zh-TW.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md)
 
-> Use only for media you are authorized to download. The project does not attempt to bypass DRM or invent alternate CDN hostnames.
+Chrome/Brave Manifest V3 extension for detecting downloadable HLS and direct MP4 media on supported video pages. It can verify byte-identical HLS mirrors before combining segments and uses a bounded-memory concurrent worker pipeline.
 
-## Why
+> Use only for media you own or are authorized to download. Encrypted/DRM HLS is intentionally rejected; the extension does not bypass DRM.
 
-A single CDN may become the transfer bottleneck even on a fast local connection. This project tries to distinguish browser-side bottlenecks from remote-side throttling and can safely combine genuinely equivalent HLS mirrors when they are available.
+## Supported sites
+
+- MissAV domains listed in `extension/manifest.json`
+- Pornhub (`pornhub.com` and subdomains)
+
+Support is based on media URLs exposed by the page/player. If a site only exposes encrypted/DRM media, this extension will not decrypt it.
 
 ## Features
 
-- Detects `.m3u8` URLs from inline scripts, DOM attributes, Resource Timing, fetch/XHR, supported mirror pages, and manual input.
-- Resolves HLS master playlists into media variants.
-- Verifies candidate mirrors structurally and samples corresponding segments with SHA-256 before mixing them.
-- Uses a continuous 4/8/16/32-worker pipeline with bounded read-ahead.
-- Dynamically favors healthier/faster verified sources and cools down failing ones.
-- Supports `EXT-X-MAP` and `EXT-X-BYTERANGE`.
-- Streams ordered output to disk through the File System Access API.
-- Provides a CI/test/package pipeline and SemVer-based GitHub Release workflow.
+- Detects `.m3u8` and direct `.mp4` URLs from inline scripts, DOM attributes, Resource Timing, Fetch/XHR and player activity.
+- MissAV-specific Surrit HLS discovery and mirror-page probing.
+- HLS master playlist variant discovery.
+- SHA-256 sample verification before mixing candidate HLS mirrors.
+- Continuous 4/8/16/32-worker pipeline with bounded read-ahead.
+- `EXT-X-MAP` and `EXT-X-BYTERANGE` support.
+- Direct MP4 downloads through the Chrome/Brave download manager.
+- UI localization through Chrome i18n: English, Traditional Chinese, Simplified Chinese, Japanese, Korean and Spanish.
+- SemVer-based CI, packaging and GitHub Release workflow.
 
 ## Install for development
 
 1. Clone the repository.
 2. Open `chrome://extensions/` or `brave://extensions/`.
-3. Enable Developer mode.
+3. Enable **Developer mode**.
 4. Choose **Load unpacked**.
 5. Select the `extension/` directory.
 
@@ -34,25 +40,18 @@ npm ci
 npm run verify
 ```
 
-See [docs/TESTING.md](docs/TESTING.md) for the full automated and manual smoke-test process.
+See [docs/TESTING.md](docs/TESTING.md) for automated checks and manual smoke tests.
 
-## Other download approaches
+## Versioning
 
-Research and tradeoffs are documented in [docs/RESEARCH.md](docs/RESEARCH.md). In short:
+The project uses Semantic Versioning. Current development version: **1.1.0**.
 
-- **N_m3u8DL-RE**: strong external HLS/DASH downloader fallback.
-- **yt-dlp `-N`**: concurrent native HLS fragment downloads and a useful speed-control comparison.
-- **Native Messaging helper**: future one-click bridge from the extension to an external downloader.
-- **Verified multi-source Range download**: possible when two URLs expose the exact same complete file.
+- Patch: bug fix (`1.1.1`)
+- Minor: backward-compatible feature (`1.2.0`)
+- Major: incompatible change (`2.0.0`)
 
-If every downloader hits the same ~1 MB/s aggregate ceiling against the same CDN, more browser workers will not fix an upstream/server-side aggregate throttle.
-
-## Versioning and releases
-
-The repository uses [Semantic Versioning](https://semver.org/) and GitHub Releases based on `vMAJOR.MINOR.PATCH` tags. See [docs/RELEASING.md](docs/RELEASING.md).
-
-Current version: **1.0.0**.
+See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## License
 
-The extension is derived from the original userscript identified in `THIRD_PARTY_NOTICES.txt`. Review upstream licensing/attribution before redistribution.
+See `LICENSE` and `THIRD_PARTY_NOTICES.txt`.

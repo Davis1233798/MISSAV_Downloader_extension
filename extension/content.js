@@ -1,41 +1,749 @@
-(()=>{'use strict';
-const P='missav-ext-downloader',S='https://surrit.com/',HM='missav-ext-hls-url',CS=[4,8,16,32],D=new Set(),M=new Map();let LU=location.href,T;
-const sl=m=>new Promise(r=>setTimeout(r,m)),fn=s=>(String(s||'missav-video').replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,' ').trim().slice(0,120)||'missav-video');
-function title(){return fn(document.querySelector('.order-first .mt-4 h1,.order-first h1,h1')?.textContent||document.title)}
-function add(v,m={}){try{const u=new URL(String(v||''),location.href).href;if(!/^https:\/\//i.test(u)||!/\.m3u8(?:[?#]|$)/i.test(u))return null;D.add(u);M.set(u,{...(M.get(u)||{}),...m,url:u});count();return u}catch{return null}}
-window.addEventListener('message',e=>{if(e.source===window&&e.origin===location.origin&&e.data?.type===HM)add(e.data.url,{by:'player'})});
-const scripts=()=>[...document.scripts].filter(x=>!x.src).map(x=>x.textContent||'').filter(Boolean);
-function scan(){for(const e of performance.getEntriesByType('resource'))add(e?.name,{by:'perf'});const re=/https:\/\/[^\s"'<>\\]+?\.m3u8(?:\?[^\s"'<>\\]*)?/ig;for(const r of scripts())for(const m of r.replace(/\\\//g,'/').replace(/&amp;/g,'&').matchAll(re))add(m[0],{by:'script'});document.querySelectorAll('[src],[href],[data-src],[data-url],[data-playlist]').forEach(e=>['src','href','data-src','data-url','data-playlist'].forEach(a=>{const v=e.getAttribute(a);if(v)add(v,{by:'dom'})}))}
-function vid(){const a=/https?:\/\/surrit\.com\/([0-9a-f-]{36})/i,b=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ig;for(const s of scripts()){const m=s.match(a);if(m)return m[1];const i=s.indexOf('seek'),x=i<0?null:s.slice(Math.max(0,i-600),i).match(b);if(x?.length)return x.at(-1)}return null}
-async function txt(u){try{const r=await fetch(u,{credentials:'omit',cache:'no-store',mode:'cors'});if(!r.ok)throw Error(`HTTP ${r.status}`);return await r.text()}catch(e){const x=await chrome.runtime.sendMessage({type:'fetch-text',url:u}).catch(()=>null);if(x?.ok)return x.text;throw Error(`${e.message}${x?.error?' / '+x.error:''}`)}}
-function at(s){const o={},r=/([A-Z0-9-]+)=("[^"]*"|[^,]*)/gi;for(const m of s.matchAll(r)){let v=m[2]||'';if(v[0]==='"'&&v.at(-1)==='"')v=v.slice(1,-1);o[m[1].toUpperCase()]=v}return o}
-function q(u,a={}){const m=a.RESOLUTION?.match(/\d+x(\d+)/);if(m)return m[1]+'p';if(a.NAME)return a.NAME;try{const p=new URL(u).pathname.split('/').filter(Boolean);return decodeURIComponent(p.at(-2)||p.at(-1)||'video')}catch{return'video'}}
-function master(t,b){const z=t.split(/\r?\n/).map(x=>x.trim()),o=[];let p=null;for(const l of z){if(!l)continue;if(l.startsWith('#EXT-X-STREAM-INF:')){p=at(l.slice(18));continue}if(l[0]==='#'||(!p&&!/\.m3u8(?:[?#]|$)/i.test(l)))continue;const u=new URL(l,b).href,a=p||{},v={url:u,attrs:a,quality:q(u,a)};add(u,v);o.push(v);p=null}return o}
-function br(v,u,m){if(!v)return null;const x=String(v).match(/^(\d+)(?:@(\d+))?$/);if(!x)throw Error('bad BYTERANGE');const n=+x[1],s=x[2]===undefined?(m.get(u)||0):+x[2],e=s+n-1;m.set(u,e+1);return{start:s,end:e,length:n}}
-function media(t,b){const o=[],m=new Map();let rg=null,du=0,sq=0;for(const l of t.split(/\r?\n/).map(x=>x.trim())){if(!l)continue;if(l.startsWith('#EXT-X-MEDIA-SEQUENCE:')){sq=+l.slice(22)||0;continue}if(l.startsWith('#EXTINF:')){du=+l.slice(8).split(',')[0]||0;continue}if(l.startsWith('#EXT-X-KEY:')){const x=at(l.slice(11)),k=(x.METHOD||'').toUpperCase();if(k&&k!=='NONE')throw Error('encrypted HLS');continue}if(l.startsWith('#EXT-X-MAP:')){const x=at(l.slice(11));if(x.URI){const u=new URL(x.URI,b).href;o.push({kind:'init',url:u,range:br(x.BYTERANGE,u,m),duration:0})}continue}if(l.startsWith('#EXT-X-BYTERANGE:')){rg=l.slice(17).trim();continue}if(l[0]==='#')continue;const u=new URL(l,b).href;o.push({kind:'media',url:u,range:br(rg,u,m),duration:du,sequence:sq++});rg=null;du=0}const a=o.filter(x=>x.kind==='media');return{items:o,media:a,total:a.reduce((s,x)=>s+x.duration,0)}}
-async function resolve(u,w){const t=await txt(u);if(!/#EXT-X-STREAM-INF:/i.test(t))return{url:u,text:t};const a=master(t,u),v=a.find(x=>x.quality===w)||a.find(x=>x.url.includes('/'+w+'/'))||a[0];if(!v)throw Error('no variant');return{url:v.url,text:await txt(v.url)}}
-async function remote(){scan();const r=await chrome.runtime.sendMessage({type:'discover-mirror-pages',pathAndQuery:location.pathname+location.search,currentHost:location.hostname}).catch(()=>null);if(r?.ok)for(const u of r.candidates||[])add(u,{by:'mirror'});count();return[...D]}
-function compat(a,b){if(a.items.length!==b.items.length||a.media.length!==b.media.length||Math.abs(a.total-b.total)>Math.max(1.5,a.total*.002))return false;for(let i=0;i<a.items.length;i++)if(a.items[i].kind!==b.items[i].kind||Math.abs((a.items[i].duration||0)-(b.items[i].duration||0))>.08||(a.items[i].range?.length||0)!==(b.items[i].range?.length||0))return false;return true}
-async function buf(i,n=0){const h={};if(i.range)h.Range=`bytes=${i.range.start}-${i.range.end}`;else if(n)h.Range=`bytes=0-${n-1}`;const r=await fetch(i.url,{credentials:'omit',cache:'no-store',mode:'cors',headers:h});if(!r.ok)throw Error(`HTTP ${r.status}`);return r.arrayBuffer()}
-async function hash(b){const h=await crypto.subtle.digest('SHA-256',b);return[...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
-async function same(a,b){if(!compat(a.parsed,b.parsed))return false;const n=a.parsed.items.length,ix=[0,Math.floor(n/2),n-1];for(const i of new Set(ix)){const[x,y]=await Promise.all([buf(a.parsed.items[i],131072),buf(b.parsed.items[i],131072)]);if(await hash(x)!==await hash(y))return false}return true}
-const src=(u,p)=>({playlistUrl:u,host:new URL(u).host,parsed:p,st:{bps:0,fail:0,cool:0,flight:0}});
-async function sources(u,st){const w=q(u,M.get(u)?.attrs||{}),r=await resolve(u,w),a=src(r.url,media(r.text,r.url)),out=[a];await remote();for(const c of[...D].filter(x=>x!==u&&x!==r.url)){try{st('驗證 '+new URL(c).host+'…');const z=await resolve(c,w);if(out.some(x=>x.playlistUrl===z.url))continue;const s=src(z.url,media(z.text,z.url));if(await same(a,s))out.push(s)}catch{}}return out}
-function pick(a,e=new Set()){const n=Date.now(),p=a.filter(x=>!e.has(x)&&x.st.cool<=n),z=p.length?p:a.filter(x=>!e.has(x));z.sort((x,y)=>(y.st.bps||1048576)/(1+y.st.flight*.6)/(1+y.st.fail*.4)-(x.st.bps||1048576)/(1+x.st.flight*.6)/(1+x.st.fail*.4));return z[0]}
-async function one(s,i){const x=s.parsed.items[i],h=x.range?{Range:`bytes=${x.range.start}-${x.range.end}`}:{},t=performance.now();s.st.flight++;try{const r=await fetch(x.url,{credentials:'omit',cache:'no-store',mode:'cors',headers:h});if(!r.ok)throw Error(`HTTP ${r.status}`);const b=await r.arrayBuffer(),v=b.byteLength/Math.max((performance.now()-t)/1000,.001);s.st.bps=s.st.bps?s.st.bps*.7+v*.3:v;s.st.fail=Math.max(0,s.st.fail-.25);return b}catch(e){s.st.fail++;s.st.cool=Date.now()+8000*Math.min(4,s.st.fail);throw e}finally{s.st.flight=Math.max(0,s.st.flight-1)}}
-async function get(a,i){let e;for(let r=0;r<3;r++){const t=new Set();while(t.size<a.length){const s=pick(a,t);if(!s)break;t.add(s);try{return await one(s,i)}catch(x){e=x}}if(r<2)await sl(500*(r+1))}throw e||Error('all sources failed')}
-function fb(n){if(!n)return'0 B';const u=['B','KB','MB','GB','TB'],i=Math.min(Math.floor(Math.log(n)/Math.log(1024)),4),v=n/1024**i;return`${v.toFixed(i? (v>=100?0:v>=10?1:2):0)} ${u[i]}`}
-const fr=n=>fb(n)+'/s',sum=a=>a.map(s=>s.host+' '+fr(s.st.bps)).join(' + ');
-async function pipe(a,w,b,c){const N=a[0].parsed.items.length,K=a[0].parsed.media.length,A=Math.max(c*3,c+4),done=new Map();let ns=0,nw=0,f=0,bytes=0,md=0,err=null,wake,start=performance.now();const sig=()=>{if(wake){const x=wake;wake=null;x()}},pump=()=>{while(!err&&f<c&&ns<N&&ns<nw+A){const i=ns++;f++;get(a,i).then(x=>done.set(i,x)).catch(e=>err=e).finally(()=>{f--;pump();sig()})}};pump();while(nw<N){while(!done.has(nw)){if(err)throw err;await new Promise(r=>wake=r)}const x=done.get(nw);done.delete(nw);await w.write(x);bytes+=x.byteLength;if(a[0].parsed.items[nw].kind==='media')md++;nw++;pump();const e=Math.max((performance.now()-start)/1000,.001);b.textContent=`${K?Math.round(md/K*100):0}% · ${fb(bytes)} · ${fr(bytes/e)} · ${a.length}來源`;b.title=sum(a)}return{bytes,sec:Math.max((performance.now()-start)/1000,.001)}}
-const cv=()=>{const n=+document.querySelector('#'+P+' .mav-ext-concurrency')?.value;return CS.includes(n)?n:16};
-async function cp(s){try{await navigator.clipboard.writeText(s)}catch{const t=document.createElement('textarea');t.value=s;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove()}}
-function cmd(u,n){return`N_m3u8DL-RE "${u}" -H "Referer: ${location.href}" -H "Origin: ${location.origin}" -H "User-Agent: ${navigator.userAgent}" --save-dir "$env:USERPROFILE\\Downloads" --save-name "${fn(n)}" --download-retry-count 10 --thread-count ${cv()} -M format=mp4`}
-async function dl(u,n,b,info){const o=b.textContent;let w;try{if(typeof showSaveFilePicker!=='function')throw Error('需要桌面版 Chrome/Brave File System Access API');const h=await showSaveFilePicker({suggestedName:n.toLowerCase().endsWith('.mp4')?n:n+'.mp4',types:[{description:'Video',accept:{'video/mp4':['.mp4']}}]});b.disabled=true;const a=await sources(u,s=>info.textContent=s);info.textContent=a.length>1?'多來源：'+sum(a):'只有 1 個可驗證來源：'+a[0].host;w=await h.createWritable();const r=await pipe(a,w,b,cv());await w.close();w=null;info.textContent='完成 · '+sum(a);b.textContent=`完成 · ${fb(r.bytes)} · ${fr(r.bytes/r.sec)}`}catch(e){if(w)try{await w.abort()}catch{}if(e?.name!=='AbortError'){info.textContent='失敗：'+(e.message||e);b.textContent='失敗';alert('下載失敗：'+(e.message||e))}}finally{setTimeout(()=>{b.disabled=false;b.textContent=o},1800)}}
-function count(x=''){const e=document.querySelector('#'+P+' .mav-ext-source-counter');if(!e)return;const h=new Set([...D].map(u=>{try{return new URL(u).host}catch{return''}}).filter(Boolean));e.textContent=`偵測 ${D.size} 個 HLS URL / ${h.size} 個主機${x?' · '+x:''}`}
-function mount(){return document.querySelector('.order-first .mt-4,.order-first,main,body')}
-function panel(m){let r=document.getElementById(P);if(r)return r;r=document.createElement('section');r.id=P;r.innerHTML=`<div class="mav-ext-header"><div><div class="mav-ext-title">MissAV 多來源影片下載</div><div class="mav-ext-source-counter"></div></div><div class="mav-ext-header-right"><label class="mav-ext-thread-control">下載執行緒 <select class="mav-ext-concurrency"><option>4</option><option>8</option><option selected>16</option><option>32</option></select></label><button class="mav-ext-btn scan">重新掃描來源</button><button class="mav-ext-btn add">加入鏡像 m3u8</button></div></div><div class="mav-ext-status">初始化…</div><div class="mav-ext-list"></div>`;m.appendChild(r);r.querySelector('.scan').onclick=async e=>{e.target.disabled=true;try{await remote();count('已重新掃描')}finally{e.target.disabled=false}};r.querySelector('.add').onclick=()=>{const u=prompt('輸入 HTTPS m3u8 URL：');if(u)count(add(u,{by:'manual'})?'已加入':'URL 無效')};count();return r}
-function row(l,v,n){const r=document.createElement('div');r.className='mav-ext-item';const a=document.createElement('div');a.className='mav-ext-quality';a.textContent=v.quality||q(v.url,v.attrs||{});const u=document.createElement('div');u.className='mav-ext-url';u.textContent=v.url;u.title=v.url;const i=document.createElement('div');i.className='mav-ext-source-info';i.textContent='下載時自動搜尋並驗證 HLS mirror';const x=document.createElement('div');x.className='mav-ext-actions';for(const[t,f,k]of[['複製連結',()=>cp(v.url+'#'+n),''],['多來源下載',()=>dl(v.url,n,d,i),'mav-ext-btn-primary'],['複製外部指令',()=>cp(cmd(v.url,n)),'']]){const d=document.createElement('button');d.className='mav-ext-btn '+k;d.type='button';d.textContent=t;d.onclick=f;x.appendChild(d)}r.append(a,u,i,x);l.appendChild(r)}
-async function init(n=0){const m=mount();if(!m){if(n<20)T=setTimeout(()=>init(n+1),500);return}const r=panel(m),s=r.querySelector('.mav-ext-status'),l=r.querySelector('.mav-ext-list');l.textContent='';scan();const id=vid();if(!id){s.textContent='尚未找到影片來源';if(n<20)T=setTimeout(()=>init(n+1),500);return}const u=add(new URL(id+'/playlist.m3u8',S).href,{by:'primary'});try{s.textContent='正在讀取畫質清單…';const t=await txt(u);let a=master(t,u);if(!a.length&&!/#EXT-X-STREAM-INF:/i.test(t))a=[{url:u,attrs:{},quality:q(u)}];if(!a.length)throw Error('主播放清單沒有可用畫質');for(const v of a)row(l,v,title());s.textContent=`找到 ${a.length} 個畫質`;remote().catch(()=>{})}catch(e){const a=[...D].filter(x=>/\/video\.m3u8(?:[?#]|$)/i.test(x));if(a.length){for(const z of a)row(l,{url:z,attrs:{},quality:q(z)},title());s.textContent=`從播放器找到 ${a.length} 個畫質`}else{s.textContent='讀取失敗';const z=document.createElement('div');z.className='mav-ext-error';z.textContent=e.message||e;l.appendChild(z)}}}
-function reset(){clearTimeout(T);document.getElementById(P)?.remove();D.clear();M.clear();init()}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>init(),{once:true});else init();new MutationObserver(()=>{if(location.href!==LU){LU=location.href;reset()}}).observe(document.documentElement,{subtree:true,childList:true});
+(() => {
+  'use strict';
+
+  const PANEL_ID = 'missav-ext-downloader';
+  const MEDIA_EVENT = 'media-ext-media-url';
+  const SURRIT_PREFIX = 'https://surrit.com/';
+  const CONCURRENCY = [4, 8, 16, 32];
+  const hlsUrls = new Set();
+  const mp4Urls = new Set();
+  const metadata = new Map();
+  const rendered = new Set();
+  let lastUrl = location.href;
+  let retryTimer;
+  let refreshTimer;
+
+  const t = (key) => chrome.i18n.getMessage(key) || key;
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  function currentSite() {
+    const host = location.hostname.toLowerCase();
+    if (host === 'pornhub.com' || host.endsWith('.pornhub.com')) return 'pornhub';
+    if (host.startsWith('missav') || host.includes('.missav')) return 'missav';
+    return 'unknown';
+  }
+
+  function safeFilename(value) {
+    return (String(value || 'video')
+      .replace(/[\\/:*?"<>|]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 140) || 'video');
+  }
+
+  function pageTitle() {
+    const heading = document.querySelector('.order-first .mt-4 h1,.order-first h1,h1')?.textContent;
+    let value = heading || document.title || 'video';
+    value = value
+      .replace(/\s*-\s*Pornhub(?:\.com)?\s*$/i, '')
+      .replace(/\s*-\s*MissAV\s*$/i, '');
+    return safeFilename(value);
+  }
+
+  function classifyUrl(value) {
+    try {
+      const url = new URL(String(value || ''), location.href).href;
+      if (!/^https:\/\//i.test(url)) return null;
+      if (/\.m3u8(?:[?#]|$)/i.test(url)) return { kind: 'hls', url };
+      if (/\.mp4(?:[?#]|$)/i.test(url)) return { kind: 'mp4', url };
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  function addMedia(value, meta = {}) {
+    const item = classifyUrl(value);
+    if (!item) return null;
+    const set = item.kind === 'hls' ? hlsUrls : mp4Urls;
+    const before = set.size;
+    set.add(item.url);
+    metadata.set(item.url, { ...(metadata.get(item.url) || {}), ...meta, kind: item.kind, url: item.url });
+    updateCounter();
+    if (set.size !== before) scheduleRefresh();
+    return item.url;
+  }
+
+  window.addEventListener('message', (event) => {
+    if (event.source !== window || event.origin !== location.origin) return;
+    if (event.data?.type !== MEDIA_EVENT) return;
+    addMedia(event.data.url, { by: 'player', kind: event.data.kind });
+  });
+
+  function inlineScripts() {
+    return [...document.scripts]
+      .filter(script => !script.src)
+      .map(script => script.textContent || '')
+      .filter(Boolean);
+  }
+
+  function scanText(text, by) {
+    const decoded = String(text || '')
+      .replace(/\\\//g, '/')
+      .replace(/\\u0026/gi, '&')
+      .replace(/&amp;/g, '&');
+
+    const re = /https:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?/ig;
+    for (const match of decoded.matchAll(re)) addMedia(match[0], { by });
+  }
+
+  function scan() {
+    try {
+      for (const entry of performance.getEntriesByType('resource')) addMedia(entry?.name, { by: 'performance' });
+    } catch {}
+
+    for (const script of inlineScripts()) scanText(script, 'script');
+
+    document.querySelectorAll('[src],[href],[data-src],[data-url],[data-playlist],[data-video-url]').forEach(element => {
+      for (const attr of ['src', 'href', 'data-src', 'data-url', 'data-playlist', 'data-video-url']) {
+        const value = element.getAttribute(attr);
+        if (value) addMedia(value, { by: 'dom' });
+      }
+    });
+  }
+
+  function missavVideoId() {
+    if (currentSite() !== 'missav') return null;
+    const surrit = /https?:\/\/surrit\.com\/([0-9a-f-]{36})/i;
+    const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ig;
+    for (const script of inlineScripts()) {
+      const match = script.match(surrit);
+      if (match) return match[1];
+      const seekIndex = script.indexOf('seek');
+      const matches = seekIndex < 0 ? null : script.slice(Math.max(0, seekIndex - 600), seekIndex).match(uuid);
+      if (matches?.length) return matches.at(-1);
+    }
+    return null;
+  }
+
+  async function fetchText(url) {
+    try {
+      const response = await fetch(url, { credentials: 'omit', cache: 'no-store', mode: 'cors' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.text();
+    } catch (firstError) {
+      const response = await chrome.runtime.sendMessage({ type: 'fetch-text', url }).catch(() => null);
+      if (response?.ok) return response.text;
+      throw new Error(`${firstError.message}${response?.error ? ` / ${response.error}` : ''}`);
+    }
+  }
+
+  function parseAttributes(text) {
+    const out = {};
+    const re = /([A-Z0-9-]+)=("[^"]*"|[^,]*)/gi;
+    for (const match of text.matchAll(re)) {
+      let value = match[2] || '';
+      if (value[0] === '"' && value.at(-1) === '"') value = value.slice(1, -1);
+      out[match[1].toUpperCase()] = value;
+    }
+    return out;
+  }
+
+  function qualityFromUrl(url, attrs = {}) {
+    const resolution = attrs.RESOLUTION?.match(/\d+x(\d+)/);
+    if (resolution) return `${resolution[1]}p`;
+    if (attrs.NAME) return attrs.NAME;
+    const raw = String(url || '');
+    const fromUrl = raw.match(/(?:^|[^0-9])(2160|1440|1080|720|480|360|240)p(?:[^0-9]|$)/i);
+    if (fromUrl) return `${fromUrl[1]}p`;
+    try {
+      const u = new URL(url);
+      const queryQuality = u.searchParams.get('quality') || u.searchParams.get('q');
+      if (/^\d{3,4}$/.test(queryQuality || '')) return `${queryQuality}p`;
+      const parts = u.pathname.split('/').filter(Boolean);
+      return decodeURIComponent(parts.at(-2) || parts.at(-1) || 'video');
+    } catch {
+      return 'video';
+    }
+  }
+
+  function parseMaster(text, baseUrl) {
+    const lines = text.split(/\r?\n/).map(line => line.trim());
+    const out = [];
+    let pending = null;
+    for (const line of lines) {
+      if (!line) continue;
+      if (line.startsWith('#EXT-X-STREAM-INF:')) {
+        pending = parseAttributes(line.slice(18));
+        continue;
+      }
+      if (line[0] === '#' || (!pending && !/\.m3u8(?:[?#]|$)/i.test(line))) continue;
+      const url = new URL(line, baseUrl).href;
+      const attrs = pending || {};
+      const variant = { url, attrs, quality: qualityFromUrl(url, attrs), kind: 'hls' };
+      addMedia(url, variant);
+      out.push(variant);
+      pending = null;
+    }
+    return out;
+  }
+
+  function byteRange(value, url, nextOffsets) {
+    if (!value) return null;
+    const match = String(value).match(/^(\d+)(?:@(\d+))?$/);
+    if (!match) throw new Error('Invalid HLS BYTERANGE');
+    const length = Number(match[1]);
+    const start = match[2] === undefined ? (nextOffsets.get(url) || 0) : Number(match[2]);
+    const end = start + length - 1;
+    nextOffsets.set(url, end + 1);
+    return { start, end, length };
+  }
+
+  function parseMedia(text, baseUrl) {
+    const items = [];
+    const nextOffsets = new Map();
+    let range = null;
+    let duration = 0;
+    let sequence = 0;
+
+    for (const line of text.split(/\r?\n/).map(value => value.trim())) {
+      if (!line) continue;
+      if (line.startsWith('#EXT-X-MEDIA-SEQUENCE:')) {
+        sequence = Number(line.slice(22)) || 0;
+        continue;
+      }
+      if (line.startsWith('#EXTINF:')) {
+        duration = Number(line.slice(8).split(',')[0]) || 0;
+        continue;
+      }
+      if (line.startsWith('#EXT-X-KEY:')) {
+        const attrs = parseAttributes(line.slice(11));
+        const method = (attrs.METHOD || '').toUpperCase();
+        if (method && method !== 'NONE') throw new Error(t('encryptedHlsUnsupported'));
+        continue;
+      }
+      if (line.startsWith('#EXT-X-MAP:')) {
+        const attrs = parseAttributes(line.slice(11));
+        if (attrs.URI) {
+          const url = new URL(attrs.URI, baseUrl).href;
+          items.push({ kind: 'init', url, range: byteRange(attrs.BYTERANGE, url, nextOffsets), duration: 0 });
+        }
+        continue;
+      }
+      if (line.startsWith('#EXT-X-BYTERANGE:')) {
+        range = line.slice(17).trim();
+        continue;
+      }
+      if (line[0] === '#') continue;
+      const url = new URL(line, baseUrl).href;
+      items.push({ kind: 'media', url, range: byteRange(range, url, nextOffsets), duration, sequence: sequence++ });
+      range = null;
+      duration = 0;
+    }
+
+    const media = items.filter(item => item.kind === 'media');
+    return { items, media, total: media.reduce((sum, item) => sum + item.duration, 0) };
+  }
+
+  async function resolvePlaylist(url, wantedQuality) {
+    const text = await fetchText(url);
+    if (!/#EXT-X-STREAM-INF:/i.test(text)) return { url, text };
+    const variants = parseMaster(text, url);
+    const selected = variants.find(item => item.quality === wantedQuality)
+      || variants.find(item => item.url.includes(`/${wantedQuality}/`))
+      || variants[0];
+    if (!selected) throw new Error(t('noUsableQuality'));
+    return { url: selected.url, text: await fetchText(selected.url) };
+  }
+
+  async function discoverRemote() {
+    scan();
+    if (currentSite() === 'missav') {
+      const result = await chrome.runtime.sendMessage({
+        type: 'discover-mirror-pages',
+        pathAndQuery: location.pathname + location.search,
+        currentHost: location.hostname
+      }).catch(() => null);
+      if (result?.ok) {
+        for (const url of result.candidates || []) addMedia(url, { by: 'mirror' });
+      }
+    }
+    updateCounter();
+    return [...hlsUrls];
+  }
+
+  function compatible(a, b) {
+    if (a.items.length !== b.items.length || a.media.length !== b.media.length) return false;
+    if (Math.abs(a.total - b.total) > Math.max(1.5, a.total * 0.002)) return false;
+    for (let i = 0; i < a.items.length; i += 1) {
+      if (a.items[i].kind !== b.items[i].kind) return false;
+      if (Math.abs((a.items[i].duration || 0) - (b.items[i].duration || 0)) > 0.08) return false;
+      if ((a.items[i].range?.length || 0) !== (b.items[i].range?.length || 0)) return false;
+    }
+    return true;
+  }
+
+  async function fetchBuffer(item, sampleBytes = 0) {
+    const headers = {};
+    if (item.range) headers.Range = `bytes=${item.range.start}-${item.range.end}`;
+    else if (sampleBytes) headers.Range = `bytes=0-${sampleBytes - 1}`;
+    const response = await fetch(item.url, { credentials: 'omit', cache: 'no-store', mode: 'cors', headers });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.arrayBuffer();
+  }
+
+  async function sha256(buffer) {
+    const digest = await crypto.subtle.digest('SHA-256', buffer);
+    return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function sameMedia(a, b) {
+    if (!compatible(a.parsed, b.parsed)) return false;
+    const count = a.parsed.items.length;
+    const samples = [0, Math.floor(count / 2), count - 1];
+    for (const index of new Set(samples)) {
+      const [left, right] = await Promise.all([
+        fetchBuffer(a.parsed.items[index], 131072),
+        fetchBuffer(b.parsed.items[index], 131072)
+      ]);
+      if (await sha256(left) !== await sha256(right)) return false;
+    }
+    return true;
+  }
+
+  const makeSource = (url, parsed) => ({
+    playlistUrl: url,
+    host: new URL(url).host,
+    parsed,
+    state: { bps: 0, fail: 0, coolUntil: 0, inFlight: 0 }
+  });
+
+  async function verifiedSources(url, setStatus) {
+    const wantedQuality = qualityFromUrl(url, metadata.get(url)?.attrs || {});
+    const resolved = await resolvePlaylist(url, wantedQuality);
+    const primary = makeSource(resolved.url, parseMedia(resolved.text, resolved.url));
+    const out = [primary];
+
+    await discoverRemote();
+    for (const candidate of [...hlsUrls].filter(item => item !== url && item !== resolved.url)) {
+      try {
+        setStatus(`${t('verifying')} ${new URL(candidate).host}…`);
+        const resolvedCandidate = await resolvePlaylist(candidate, wantedQuality);
+        if (out.some(item => item.playlistUrl === resolvedCandidate.url)) continue;
+        const source = makeSource(resolvedCandidate.url, parseMedia(resolvedCandidate.text, resolvedCandidate.url));
+        if (await sameMedia(primary, source)) out.push(source);
+      } catch {}
+    }
+    return out;
+  }
+
+  function pickSource(sources, excluded = new Set()) {
+    const now = Date.now();
+    const healthy = sources.filter(source => !excluded.has(source) && source.state.coolUntil <= now);
+    const candidates = healthy.length ? healthy : sources.filter(source => !excluded.has(source));
+    candidates.sort((a, b) => {
+      const aScore = (a.state.bps || 1048576) / (1 + a.state.inFlight * 0.6) / (1 + a.state.fail * 0.4);
+      const bScore = (b.state.bps || 1048576) / (1 + b.state.inFlight * 0.6) / (1 + b.state.fail * 0.4);
+      return bScore - aScore;
+    });
+    return candidates[0];
+  }
+
+  async function downloadItem(source, index) {
+    const item = source.parsed.items[index];
+    const headers = item.range ? { Range: `bytes=${item.range.start}-${item.range.end}` } : {};
+    const started = performance.now();
+    source.state.inFlight += 1;
+    try {
+      const response = await fetch(item.url, { credentials: 'omit', cache: 'no-store', mode: 'cors', headers });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const buffer = await response.arrayBuffer();
+      const bps = buffer.byteLength / Math.max((performance.now() - started) / 1000, 0.001);
+      source.state.bps = source.state.bps ? source.state.bps * 0.7 + bps * 0.3 : bps;
+      source.state.fail = Math.max(0, source.state.fail - 0.25);
+      return buffer;
+    } catch (error) {
+      source.state.fail += 1;
+      source.state.coolUntil = Date.now() + 8000 * Math.min(4, source.state.fail);
+      throw error;
+    } finally {
+      source.state.inFlight = Math.max(0, source.state.inFlight - 1);
+    }
+  }
+
+  async function getItem(sources, index) {
+    let lastError;
+    for (let round = 0; round < 3; round += 1) {
+      const tried = new Set();
+      while (tried.size < sources.length) {
+        const source = pickSource(sources, tried);
+        if (!source) break;
+        tried.add(source);
+        try {
+          return await downloadItem(source, index);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (round < 2) await sleep(500 * (round + 1));
+    }
+    throw lastError || new Error(t('allSourcesFailed'));
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / 1024 ** index;
+    return `${value.toFixed(index ? (value >= 100 ? 0 : value >= 10 ? 1 : 2) : 0)} ${units[index]}`;
+  }
+
+  const formatRate = value => `${formatBytes(value)}/s`;
+  const sourceSummary = sources => sources.map(source => `${source.host} ${formatRate(source.state.bps)}`).join(' + ');
+
+  async function pipeToDisk(sources, writable, button, concurrency) {
+    const itemCount = sources[0].parsed.items.length;
+    const mediaCount = sources[0].parsed.media.length;
+    const readAhead = Math.max(concurrency * 3, concurrency + 4);
+    const completed = new Map();
+    let nextStart = 0;
+    let nextWrite = 0;
+    let inFlight = 0;
+    let bytes = 0;
+    let mediaDone = 0;
+    let fatalError = null;
+    let wake;
+    const started = performance.now();
+
+    const signal = () => {
+      if (wake) {
+        const callback = wake;
+        wake = null;
+        callback();
+      }
+    };
+
+    const pump = () => {
+      while (!fatalError && inFlight < concurrency && nextStart < itemCount && nextStart < nextWrite + readAhead) {
+        const index = nextStart++;
+        inFlight += 1;
+        getItem(sources, index)
+          .then(buffer => completed.set(index, buffer))
+          .catch(error => { fatalError = error; })
+          .finally(() => {
+            inFlight -= 1;
+            pump();
+            signal();
+          });
+      }
+    };
+
+    pump();
+    while (nextWrite < itemCount) {
+      while (!completed.has(nextWrite)) {
+        if (fatalError) throw fatalError;
+        await new Promise(resolve => { wake = resolve; });
+      }
+      const buffer = completed.get(nextWrite);
+      completed.delete(nextWrite);
+      await writable.write(buffer);
+      bytes += buffer.byteLength;
+      if (sources[0].parsed.items[nextWrite].kind === 'media') mediaDone += 1;
+      nextWrite += 1;
+      pump();
+
+      const elapsed = Math.max((performance.now() - started) / 1000, 0.001);
+      button.textContent = `${mediaCount ? Math.round(mediaDone / mediaCount * 100) : 0}% · ${formatBytes(bytes)} · ${formatRate(bytes / elapsed)} · ${sources.length} ${t('sources')}`;
+      button.title = sourceSummary(sources);
+    }
+
+    return { bytes, seconds: Math.max((performance.now() - started) / 1000, 0.001) };
+  }
+
+  function concurrencyValue() {
+    const value = Number(document.querySelector(`#${PANEL_ID} .mav-ext-concurrency`)?.value);
+    return CONCURRENCY.includes(value) ? value : 16;
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+  }
+
+  function externalCommand(url, name) {
+    return `N_m3u8DL-RE "${url}" -H "Referer: ${location.href}" -H "Origin: ${location.origin}" -H "User-Agent: ${navigator.userAgent}" --save-dir "$env:USERPROFILE\\Downloads" --save-name "${safeFilename(name)}" --download-retry-count 10 --thread-count ${concurrencyValue()} -M format=mp4`;
+  }
+
+  async function downloadHls(url, name, button, info) {
+    const original = button.textContent;
+    let writable;
+    try {
+      if (typeof showSaveFilePicker !== 'function') throw new Error(t('desktopApiRequired'));
+      const handle = await showSaveFilePicker({
+        suggestedName: name.toLowerCase().endsWith('.mp4') ? name : `${name}.mp4`,
+        types: [{ description: 'Video', accept: { 'video/mp4': ['.mp4'] } }]
+      });
+      button.disabled = true;
+      const sources = await verifiedSources(url, value => { info.textContent = value; });
+      info.textContent = sources.length > 1
+        ? `${t('multiSource')}: ${sourceSummary(sources)}`
+        : `${t('singleVerifiedSource')}: ${sources[0].host}`;
+      writable = await handle.createWritable();
+      const result = await pipeToDisk(sources, writable, button, concurrencyValue());
+      await writable.close();
+      writable = null;
+      info.textContent = `${t('completed')} · ${sourceSummary(sources)}`;
+      button.textContent = `${t('completed')} · ${formatBytes(result.bytes)} · ${formatRate(result.bytes / result.seconds)}`;
+    } catch (error) {
+      if (writable) {
+        try { await writable.abort(); } catch {}
+      }
+      if (error?.name !== 'AbortError') {
+        info.textContent = `${t('failed')}: ${error.message || error}`;
+        button.textContent = t('failed');
+        alert(`${t('downloadFailed')}: ${error.message || error}`);
+      }
+    } finally {
+      setTimeout(() => {
+        button.disabled = false;
+        button.textContent = original;
+      }, 1800);
+    }
+  }
+
+  async function downloadMp4(url, name, button, info) {
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = t('startingDownload');
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: 'download-direct',
+        url,
+        filename: `${safeFilename(name)}.mp4`
+      });
+      if (!result?.ok) throw new Error(result?.error || t('downloadFailed'));
+      info.textContent = `${t('browserDownloadStarted')} #${result.downloadId}`;
+      button.textContent = t('started');
+    } catch (error) {
+      info.textContent = `${t('failed')}: ${error.message || error}`;
+      button.textContent = t('failed');
+    } finally {
+      setTimeout(() => {
+        button.disabled = false;
+        button.textContent = original;
+      }, 1800);
+    }
+  }
+
+  function updateCounter(extra = '') {
+    const element = document.querySelector(`#${PANEL_ID} .mav-ext-source-counter`);
+    if (!element) return;
+    const all = [...hlsUrls, ...mp4Urls];
+    const hosts = new Set(all.map(url => {
+      try { return new URL(url).host; } catch { return ''; }
+    }).filter(Boolean));
+    const pieces = [
+      `${t('detected')} ${hlsUrls.size} ${t('hlsUrls')}`,
+      `${mp4Urls.size} ${t('mp4Urls')}`,
+      `${hosts.size} ${t('hosts')}`
+    ];
+    element.textContent = `${pieces.join(' / ')}${extra ? ` · ${extra}` : ''}`;
+  }
+
+  function mountTarget() {
+    if (currentSite() === 'missav') return document.querySelector('.order-first .mt-4,.order-first,main,body');
+    return document.querySelector('main,#main-container,#wrapper,body');
+  }
+
+  function panel(target) {
+    let root = document.getElementById(PANEL_ID);
+    if (root) return root;
+    root = document.createElement('section');
+    root.id = PANEL_ID;
+    root.innerHTML = `
+      <div class="mav-ext-header">
+        <div>
+          <div class="mav-ext-title">${t('panelTitle')}</div>
+          <div class="mav-ext-source-counter"></div>
+        </div>
+        <div class="mav-ext-header-right">
+          <label class="mav-ext-thread-control">${t('downloadThreads')}
+            <select class="mav-ext-concurrency"><option>4</option><option>8</option><option selected>16</option><option>32</option></select>
+          </label>
+          <button class="mav-ext-btn scan" type="button">${t('rescanSources')}</button>
+          <button class="mav-ext-btn add" type="button">${t('addMirror')}</button>
+        </div>
+      </div>
+      <div class="mav-ext-status">${t('initializing')}</div>
+      <div class="mav-ext-list"></div>`;
+    target.prepend(root);
+
+    root.querySelector('.scan').onclick = async (event) => {
+      event.target.disabled = true;
+      try {
+        await discoverRemote();
+        await refresh();
+        updateCounter(t('rescanned'));
+      } finally {
+        event.target.disabled = false;
+      }
+    };
+
+    root.querySelector('.add').onclick = () => {
+      const url = prompt(t('promptM3u8'));
+      if (!url) return;
+      updateCounter(addMedia(url, { by: 'manual' }) ? t('added') : t('invalidUrl'));
+    };
+    updateCounter();
+    return root;
+  }
+
+  function addButton(container, label, onClick, primary = false) {
+    const button = document.createElement('button');
+    button.className = `mav-ext-btn ${primary ? 'mav-ext-btn-primary' : ''}`;
+    button.type = 'button';
+    button.textContent = label;
+    button.onclick = onClick;
+    container.appendChild(button);
+    return button;
+  }
+
+  function renderHlsRow(list, variant, name) {
+    const key = `hls:${variant.url}`;
+    if (rendered.has(key)) return;
+    rendered.add(key);
+
+    const row = document.createElement('div');
+    row.className = 'mav-ext-item';
+    const quality = document.createElement('div');
+    quality.className = 'mav-ext-quality';
+    quality.textContent = variant.quality || qualityFromUrl(variant.url, variant.attrs || {});
+    const url = document.createElement('div');
+    url.className = 'mav-ext-url';
+    url.textContent = variant.url;
+    url.title = variant.url;
+    const info = document.createElement('div');
+    info.className = 'mav-ext-source-info';
+    info.textContent = t('hlsSourceInfo');
+    const actions = document.createElement('div');
+    actions.className = 'mav-ext-actions';
+
+    addButton(actions, t('copyLink'), () => copyText(variant.url));
+    let downloadButton;
+    downloadButton = addButton(actions, t('multiSourceDownload'), () => downloadHls(variant.url, name, downloadButton, info), true);
+    addButton(actions, t('copyExternalCommand'), () => copyText(externalCommand(variant.url, name)));
+    row.append(quality, url, info, actions);
+    list.appendChild(row);
+  }
+
+  function renderMp4Row(list, urlValue, name) {
+    const key = `mp4:${urlValue}`;
+    if (rendered.has(key)) return;
+    rendered.add(key);
+
+    const row = document.createElement('div');
+    row.className = 'mav-ext-item';
+    const quality = document.createElement('div');
+    quality.className = 'mav-ext-quality';
+    quality.textContent = `${qualityFromUrl(urlValue)} MP4`;
+    const url = document.createElement('div');
+    url.className = 'mav-ext-url';
+    url.textContent = urlValue;
+    url.title = urlValue;
+    const info = document.createElement('div');
+    info.className = 'mav-ext-source-info';
+    info.textContent = t('directMp4Info');
+    const actions = document.createElement('div');
+    actions.className = 'mav-ext-actions';
+
+    addButton(actions, t('copyLink'), () => copyText(urlValue));
+    let downloadButton;
+    downloadButton = addButton(actions, t('directDownload'), () => downloadMp4(urlValue, name, downloadButton, info), true);
+    row.append(quality, url, info, actions);
+    list.appendChild(row);
+  }
+
+  async function expandHls(url) {
+    try {
+      const text = await fetchText(url);
+      if (/#EXT-X-STREAM-INF:/i.test(text)) return parseMaster(text, url);
+      return [{ url, attrs: metadata.get(url)?.attrs || {}, quality: qualityFromUrl(url), kind: 'hls' }];
+    } catch {
+      return [{ url, attrs: metadata.get(url)?.attrs || {}, quality: qualityFromUrl(url), kind: 'hls' }];
+    }
+  }
+
+  async function refresh() {
+    const root = document.getElementById(PANEL_ID);
+    if (!root) return;
+    const status = root.querySelector('.mav-ext-status');
+    const list = root.querySelector('.mav-ext-list');
+    scan();
+
+    const name = pageTitle();
+    let newRows = 0;
+    for (const url of [...hlsUrls]) {
+      const variants = await expandHls(url);
+      for (const variant of variants) {
+        const key = `hls:${variant.url}`;
+        if (!rendered.has(key)) newRows += 1;
+        renderHlsRow(list, variant, name);
+      }
+    }
+    for (const url of [...mp4Urls]) {
+      const key = `mp4:${url}`;
+      if (!rendered.has(key)) newRows += 1;
+      renderMp4Row(list, url, name);
+    }
+
+    const total = rendered.size;
+    status.textContent = total ? `${t('foundSources')} ${total}` : t('waitingForSource');
+    updateCounter(newRows ? t('updated') : '');
+  }
+
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => refresh().catch(() => {}), 180);
+  }
+
+  async function init(attempt = 0) {
+    const target = mountTarget();
+    if (!target) {
+      if (attempt < 20) retryTimer = setTimeout(() => init(attempt + 1), 500);
+      return;
+    }
+
+    const root = panel(target);
+    const status = root.querySelector('.mav-ext-status');
+    scan();
+
+    const id = missavVideoId();
+    if (id) addMedia(new URL(`${id}/playlist.m3u8`, SURRIT_PREFIX).href, { by: 'primary' });
+
+    status.textContent = t('scanningSources');
+    await refresh();
+    discoverRemote().then(refresh).catch(() => {});
+
+    setTimeout(() => { scan(); refresh().catch(() => {}); }, 1000);
+    setTimeout(() => { scan(); refresh().catch(() => {}); }, 3000);
+  }
+
+  function reset() {
+    clearTimeout(retryTimer);
+    clearTimeout(refreshTimer);
+    document.getElementById(PANEL_ID)?.remove();
+    hlsUrls.clear();
+    mp4Urls.clear();
+    metadata.clear();
+    rendered.clear();
+    init();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init(), { once: true });
+  else init();
+
+  new MutationObserver(() => {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      reset();
+    }
+  }).observe(document.documentElement, { subtree: true, childList: true });
 })();

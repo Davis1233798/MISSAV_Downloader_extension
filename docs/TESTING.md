@@ -1,50 +1,64 @@
-# Test process
+# Testing
 
-## Local automated test
+## Automated verification
 
-Requirements: Node.js 20+ and `zip`/`unzip`.
+Run on Node.js 20+:
 
 ```bash
 npm ci
 npm run verify
 ```
 
-`npm run verify` performs:
-1. JavaScript syntax checks with `node --check`.
-2. Manifest validation and package/manifest version alignment.
-3. Node unit tests for manifest invariants and HLS parsing fixtures.
-4. Production ZIP build and ZIP integrity verification.
+`verify` must pass all of the following before a release:
 
-## Chrome manual smoke test
+1. JavaScript syntax checks for `content.js`, `background.js` and `sniffer.js`.
+2. Manifest V3 validation and SemVer alignment with `package.json`.
+3. Required Chrome i18n locales exist and contain the same message keys as English.
+4. MissAV and Pornhub match patterns are present in both content-script declarations.
+5. `downloads` permission exists for direct MP4 downloads.
+6. Unit tests for manifest/i18n and HLS parsing fixtures.
+7. Production ZIP creation and `unzip -t` integrity verification.
 
-1. Open `chrome://extensions` and enable Developer mode.
-2. Load `extension/` as an unpacked extension.
-3. Open a supported MissAV video page.
-4. Confirm the panel appears and variants are detected.
-5. Click **重新掃描來源** and confirm the source count updates without console errors.
-6. Select a small/short test video where you are authorized to download.
-7. Test 4 and 16 workers; confirm the output file completes and media playback duration is plausible.
-8. If multiple HLS sources are found, confirm only SHA-256-verified sources are shown as active.
-9. Open DevTools and confirm no uncaught errors in page, content-script, or service-worker consoles.
+## Manual smoke test — Chrome and Brave
 
-## Brave manual smoke test
+Perform on both browsers before a release candidate is promoted.
 
-Repeat the Chrome smoke test under `brave://extensions`.
+### MissAV
 
-## Regression checklist
+1. Load the unpacked `extension/` directory.
+2. Open a MissAV video page that you are authorized to download.
+3. Confirm the panel appears and detects at least one HLS URL or player source.
+4. Confirm master playlist qualities render when available.
+5. Test 4 and 16 workers on a short sample.
+6. Confirm the resulting file opens and duration is plausible.
+7. If multiple mirrors are reported, confirm only SHA-256-verified mirrors are mixed.
 
-- Master playlist with relative variant URLs.
-- Direct media playlist.
-- `EXT-X-MAP` initialization segment.
-- `EXT-X-BYTERANGE` explicit and implicit offsets.
-- 403/429 source cooldown and retry behavior.
-- Single-source fallback when no valid mirror exists.
-- User-cancelled save picker does not leave the UI stuck.
-- SPA navigation removes/recreates the panel correctly.
+### Pornhub
+
+1. Open a Pornhub video page that you are authorized to download.
+2. Start playback if the player does not load media until user interaction.
+3. Confirm the panel detects any exposed `.m3u8` and/or direct `.mp4` URL.
+4. For HLS, test one short download and verify playback.
+5. For direct MP4, click **Direct download** and confirm Chrome/Brave opens its save dialog/download flow.
+6. If the page exposes only encrypted/DRM HLS, confirm the extension refuses it rather than attempting decryption.
+
+## Localization smoke test
+
+Temporarily change Chrome/Brave UI language or run separate browser profiles for:
+
+- English (`en`)
+- Traditional Chinese (`zh_TW`)
+- Simplified Chinese (`zh_CN`)
+- Japanese (`ja`)
+- Korean (`ko`)
+- Spanish (`es`)
+
+For each locale verify the extension name, action tooltip, panel title and buttons are localized and no raw message keys are displayed.
 
 ## Release gate
 
-A release tag must not be created unless:
+A release must not be created unless:
+
 - `npm run verify` passes locally or on CI;
 - Chrome and Brave smoke tests pass;
 - `package.json` and `extension/manifest.json` contain the same SemVer;
